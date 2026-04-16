@@ -32,11 +32,29 @@ jobs:
         env:
           CONFIG_PRESET: ${{ inputs.config }}
         run: |
-          npm install --no-save @commitlint/cli@latest
+          # install in isolated temp dir to avoid peer dep conflicts with repo
+          mkdir -p /tmp/commitlint-bin
+          cd /tmp/commitlint-bin
+          npm init -y --silent
+          npm install @commitlint/cli@latest
           if [ "$CONFIG_PRESET" = "conventional" ]; then
-            npm install --no-save @commitlint/config-conventional@latest
+            npm install @commitlint/config-conventional@latest
           elif [ "$CONFIG_PRESET" = "angular" ]; then
-            npm install --no-save @commitlint/config-angular@latest
+            npm install @commitlint/config-angular@latest
+          fi
+          echo "/tmp/commitlint-bin/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Create commitlint config
+        env:
+          CONFIG_PRESET: ${{ inputs.config }}
+        run: |
+          # use repo config if it exists, otherwise create a temp one
+          if [ ! -f commitlint.config.js ] && [ ! -f commitlint.config.mjs ] && [ ! -f commitlint.config.cjs ] && [ ! -f .commitlintrc.yml ] && [ ! -f .commitlintrc.json ]; then
+            if [ "$CONFIG_PRESET" = "angular" ]; then
+              echo 'export default { extends: ["@commitlint/config-angular"] };' > commitlint.config.mjs
+            else
+              echo 'export default { extends: ["@commitlint/config-conventional"] };' > commitlint.config.mjs
+            fi
           fi
 
       - name: Determine commit range
@@ -60,4 +78,5 @@ jobs:
         env:
           COMMIT_FROM: ${{ steps.range.outputs.from }}
           COMMIT_TO: ${{ steps.range.outputs.to }}
-        run: npx commitlint --from "$COMMIT_FROM" --to "$COMMIT_TO" --verbose
+          NODE_PATH: /tmp/commitlint-bin/node_modules
+        run: commitlint --from "$COMMIT_FROM" --to "$COMMIT_TO" --verbose
