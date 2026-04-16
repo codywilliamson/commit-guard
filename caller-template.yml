@@ -1,0 +1,23 @@
+## commit-guard caller workflow
+## install: copy this to .github/workflows/commitlint.yml
+## docs: https://github.com/codywilliamson/commit-guard
+
+name: Commitlint
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@main
+    with:
+      ## config preset: conventional, angular
+      config: "conventional"
+    permissions:
+      contents: read

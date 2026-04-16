@@ -1,0 +1,63 @@
+name: Commitlint
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: "Commitlint config preset (conventional, angular, or custom)"
+        type: string
+        default: "conventional"
+      node-version:
+        description: "Node.js version"
+        type: string
+        default: "22"
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    name: Lint Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install commitlint
+        env:
+          CONFIG_PRESET: ${{ inputs.config }}
+        run: |
+          npm install --no-save @commitlint/cli@latest
+          if [ "$CONFIG_PRESET" = "conventional" ]; then
+            npm install --no-save @commitlint/config-conventional@latest
+          elif [ "$CONFIG_PRESET" = "angular" ]; then
+            npm install --no-save @commitlint/config-angular@latest
+          fi
+
+      - name: Determine commit range
+        id: range
+        env:
+          GH_EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: |
+          if [ "$GH_EVENT" = "pull_request" ] || [ "$GH_EVENT" = "pull_request_target" ]; then
+            echo "from=$BASE_SHA" >> "$GITHUB_OUTPUT"
+            echo "to=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "from=$BEFORE_SHA" >> "$GITHUB_OUTPUT"
+            echo "to=$AFTER_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Lint commits
+        env:
+          COMMIT_FROM: ${{ steps.range.outputs.from }}
+          COMMIT_TO: ${{ steps.range.outputs.to }}
+        run: npx commitlint --from "$COMMIT_FROM" --to "$COMMIT_TO" --verbose
