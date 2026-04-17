@@ -16,9 +16,14 @@ permissions:
 
 jobs:
   commitlint:
-    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@main
+    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.2.0
     with:
       ## config preset: conventional, angular
       config: "conventional"
+      ## PR lint strategy: smart, commits, title
+      pr-mode: "smart"
+      ## optional: skip known noisy subjects
+      # ignore-message-patterns: |
+      #   ^Initial plan$
     permissions:
       contents: read

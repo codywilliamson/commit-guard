@@ -11,6 +11,22 @@ on:
         description: "Node.js version"
         type: string
         default: "22"
+      pr-mode:
+        description: "Pull request lint strategy: smart, commits, or title"
+        type: string
+        default: "smart"
+      ignore-bot-commits:
+        description: "Skip bot-authored commits when linting commit ranges"
+        type: boolean
+        default: true
+      ignore-merge-commits:
+        description: "Skip merge commits when linting commit ranges"
+        type: boolean
+        default: true
+      ignore-message-patterns:
+        description: "Newline-delimited regex patterns for commit subjects to skip"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -23,6 +39,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: codywilliamson/commit-guard
+          ref: ${{ github.workflow_sha }}
+          path: .commit-guard
 
       - uses: actions/setup-node@v4
         with:
@@ -66,17 +88,34 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.event.after }}
         run: |
+          normalize_sha() {
+            local value="$1"
+
+            if [[ -z "$value" || "$value" =~ ^0+$ ]]; then
+              return 1
+            fi
+
+            printf '%s\n' "$value"
+          }
+
           if [ "$GH_EVENT" = "pull_request" ] || [ "$GH_EVENT" = "pull_request_target" ]; then
-            echo "from=$BASE_SHA" >> "$GITHUB_OUTPUT"
-            echo "to=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+            echo "from=$(normalize_sha "$BASE_SHA" || true)" >> "$GITHUB_OUTPUT"
+            echo "to=$(normalize_sha "$HEAD_SHA" || true)" >> "$GITHUB_OUTPUT"
           else
-            echo "from=$BEFORE_SHA" >> "$GITHUB_OUTPUT"
-            echo "to=$AFTER_SHA" >> "$GITHUB_OUTPUT"
+            echo "from=$(normalize_sha "$BEFORE_SHA" || true)" >> "$GITHUB_OUTPUT"
+            echo "to=$(normalize_sha "$AFTER_SHA" || true)" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Lint commits
         env:
-          COMMIT_FROM: ${{ steps.range.outputs.from }}
-          COMMIT_TO: ${{ steps.range.outputs.to }}
+          CG_EVENT_NAME: ${{ github.event_name }}
+          CG_PR_MODE: ${{ inputs.pr-mode }}
+          CG_PR_TITLE: ${{ github.event.pull_request.title }}
+          CG_RANGE_FROM: ${{ steps.range.outputs.from }}
+          CG_RANGE_TO: ${{ steps.range.outputs.to }}
+          CG_IGNORE_BOT_COMMITS: ${{ inputs.ignore-bot-commits }}
+          CG_IGNORE_MERGE_COMMITS: ${{ inputs.ignore-merge-commits }}
+          CG_IGNORE_MESSAGE_PATTERNS: ${{ inputs.ignore-message-patterns }}
+          CG_COMMITLINT_CMD: commitlint
           NODE_PATH: /tmp/commitlint-bin/node_modules
-        run: commitlint --from "$COMMIT_FROM" --to "$COMMIT_TO" --verbose
+        run: .commit-guard/scripts/run-commitlint-ci.sh
