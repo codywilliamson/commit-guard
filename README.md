@@ -112,7 +112,7 @@ permissions:
 
 jobs:
   commitlint:
-    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.2.1
+    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.2.2
     with:
       config: "conventional"
       pr-mode: "smart"

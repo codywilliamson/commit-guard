@@ -6,7 +6,7 @@ set -euo pipefail
 # or:    ./install.sh [options]
 
 GUARD_REPO="${COMMIT_GUARD_REPO:-codywilliamson/commit-guard}"
-GUARD_REF="${COMMIT_GUARD_REF:-v0.2.1}"
+GUARD_REF="${COMMIT_GUARD_REF:-v0.2.2}"
 TEMPLATE_URL="${COMMIT_GUARD_TEMPLATE_URL:-https://raw.githubusercontent.com/${GUARD_REPO}/${GUARD_REF}/caller-template.yml}"
 VALIDATOR_URL="${COMMIT_GUARD_VALIDATOR_URL:-https://raw.githubusercontent.com/${GUARD_REPO}/${GUARD_REF}/scripts/validate-commit-message.sh}"
 WORKFLOW_DIR=".github/workflows"

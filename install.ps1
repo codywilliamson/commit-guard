@@ -24,7 +24,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $GuardRepo = if ($env:COMMIT_GUARD_REPO) { $env:COMMIT_GUARD_REPO } else { "codywilliamson/commit-guard" }
-$GuardRef = if ($env:COMMIT_GUARD_REF) { $env:COMMIT_GUARD_REF } else { "v0.2.1" }
+$GuardRef = if ($env:COMMIT_GUARD_REF) { $env:COMMIT_GUARD_REF } else { "v0.2.2" }
 $TemplateUrl = if ($env:COMMIT_GUARD_TEMPLATE_URL) { $env:COMMIT_GUARD_TEMPLATE_URL } else { "https://raw.githubusercontent.com/$GuardRepo/$GuardRef/caller-template.yml" }
 $ValidatorUrl = if ($env:COMMIT_GUARD_VALIDATOR_URL) { $env:COMMIT_GUARD_VALIDATOR_URL } else { "https://raw.githubusercontent.com/$GuardRepo/$GuardRef/scripts/validate-commit-message.sh" }
 $WorkflowDir = ".github/workflows"
