@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   commitlint:
-    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.2.0
+    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.2.1
     with:
       ## config preset: conventional, angular
       config: "conventional"

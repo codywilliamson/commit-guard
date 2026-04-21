@@ -36,9 +36,38 @@ jobs:
     name: Lint Commit Messages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout caller repo (with retry)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          # actions/checkout can fail transiently when github's git backend
+          # hasn't replicated a just-pushed sha yet ("not our ref").
+          # retry with backoff before giving up.
+          attempt=0
+          max_attempts=6
+          wait=8
+          until [ "$attempt" -ge "$max_attempts" ]; do
+            attempt=$((attempt + 1))
+            echo "::group::checkout attempt ${attempt}/${max_attempts}"
+            if git clone --filter=blob:none --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" . \
+              && git fetch --no-tags --depth=500 origin "$TARGET_SHA" \
+              && git checkout --detach "$TARGET_SHA"; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            rm -rf .git ./* ./.[!.]* 2>/dev/null || true
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              echo "checkout failed, waiting ${wait}s before retry..."
+              sleep "$wait"
+              wait=$((wait * 2))
+            fi
+          done
+          echo "checkout failed after ${max_attempts} attempts"
+          exit 1
 
       - uses: actions/checkout@v4
         with:

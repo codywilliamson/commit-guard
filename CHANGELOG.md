@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.1]
+
+- Fix transient "not our ref" failures on fresh pushes by replacing the caller checkout with a retry-aware clone that backs off up to six times before giving up.
+
 ## [0.2.0]
 
 - Add smart PR commitlint handling with PR title fallback for noisy bot and plan commits.
