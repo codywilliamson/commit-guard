@@ -2,13 +2,13 @@
 
 ## [0.3.0]
 
-- Add `.commit-guard.json` per-repo config file, read by both CI and local hooks. File values override workflow inputs.
+- Add `.commit-guard.yml` per-repo config file, read by both CI and local hooks. File values override workflow inputs. Parsed with plain bash locally (flat schema), validated with `yq` in CI.
 - Add `ai-attribution` policy (`allow`, `warn`, `strip`, `block`) to catch AI co-author trailers and "generated with" bylines. `strip` rewrites the message locally and acts as `block` in CI.
 - Add custom `types` list, enforced by the native hook and via a generated commitlint `type-enum` rule in CI.
 - Add `ban-patterns` — case-insensitive regexes that fail the lint when matched anywhere in a commit message.
 - Add `enforce: warn` mode — CI annotates failures but passes; the local hook prints the error and allows the commit.
 - Add `branches` filter — push events on unlisted branches skip linting.
-- Installers gain `--ai-attribution` and `--enforce` flags and write a starter `.commit-guard.json`.
+- Installers gain `--ai-attribution` and `--enforce` flags and write a commented starter `.commit-guard.yml`.
 
 ## [0.2.2]
 

@@ -31,23 +31,28 @@ Common options:
 
 ## Configuration file
 
-Both CI and local hooks read an optional `.commit-guard.json` at the repo root.
-File values override workflow inputs; workflow inputs apply when the file or
-key is absent. All keys are optional.
+Both CI and local hooks read an optional `.commit-guard.yml` (or
+`.commit-guard.yaml`) at the repo root. File values override workflow inputs;
+workflow inputs apply when the file or key is absent. All keys are optional.
 
-```json
-{
-  "config": "conventional",
-  "pr-mode": "smart",
-  "enforce": "block",
-  "ai-attribution": "block",
-  "types": ["feat", "fix", "chore", "ci", "docs", "test", "refactor", "perf", "build", "style"],
-  "ban-patterns": ["password"],
-  "branches": ["main", "master"],
-  "ignore-bot-commits": true,
-  "ignore-merge-commits": true,
-  "ignore-message-patterns": ["^Initial plan$"]
-}
+```yaml
+config: conventional
+pr-mode: smart
+enforce: block
+ai-attribution: block
+types:
+  - feat
+  - fix
+  - chore
+ban-patterns:
+  - password
+branches:
+  - main
+  - master
+ignore-bot-commits: true
+ignore-merge-commits: true
+ignore-message-patterns:
+  - ^Initial plan$
 ```
 
 - `enforce`: `block` (default) fails on violations; `warn` annotates and passes.
@@ -67,12 +72,13 @@ key is absent. All keys are optional.
 - `branches`: on push events, only these branches are linted. Empty or absent
   means all branches.
 
-The native hook parses the file with `jq` when available. Without `jq`, a
-built-in fallback parser is used — keep the file flat and pretty-printed with
-one array element per line, and avoid `"` inside values.
+The hooks parse the file with plain bash — no jq, yq, or Node required. Keep
+the schema flat: top-level keys and block-style lists (`- item` per line), as
+shown above. Comments and quoted values are fine. CI validates the file with
+`yq` and fails loudly on invalid YAML.
 
-The installer writes a starter `.commit-guard.json` with
-`"ai-attribution": "block"` for new installs; existing configs are never
+The installer writes a commented starter `.commit-guard.yml` with
+`ai-attribution: block` for new installs; existing configs are never
 overwritten.
 
 ## What changed in v0.2.0
