@@ -18,10 +18,15 @@ jobs:
   commitlint:
     uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.2.2
     with:
+      ## values in .commit-guard.json at the repo root override these inputs
       ## config preset: conventional, angular
       config: "conventional"
       ## PR lint strategy: smart, commits, title
       pr-mode: "smart"
+      ## enforcement: block (default), warn
+      # enforce: "block"
+      ## AI attribution policy: allow (default), warn, strip, block
+      # ai-attribution: "block"
       ## optional: skip known noisy subjects
       # ignore-message-patterns: |
       #   ^Initial plan$

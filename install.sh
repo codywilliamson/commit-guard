@@ -17,6 +17,8 @@ CONFIG="conventional"
 HOOK_MODE="auto"
 PM=""
 PR_MODE="smart"
+AI_ATTRIBUTION="block"
+ENFORCE="block"
 
 replace_line() {
   local search="$1"
@@ -68,6 +70,41 @@ ensure_valid_pr_mode() {
       exit 1
       ;;
   esac
+}
+
+ensure_valid_policies() {
+  case "$AI_ATTRIBUTION" in
+    allow|warn|strip|block) ;;
+    *)
+      echo "error: invalid ai-attribution '${AI_ATTRIBUTION}'. expected allow, warn, strip, or block."
+      exit 1
+      ;;
+  esac
+
+  case "$ENFORCE" in
+    block|warn) ;;
+    *)
+      echo "error: invalid enforce '${ENFORCE}'. expected block or warn."
+      exit 1
+      ;;
+  esac
+}
+
+write_config_file() {
+  if [[ -f ".commit-guard.json" ]]; then
+    echo "  .commit-guard.json already exists, skipping"
+    return
+  fi
+
+  cat > .commit-guard.json <<CONF
+{
+  "config": "${CONFIG}",
+  "pr-mode": "${PR_MODE}",
+  "enforce": "${ENFORCE}",
+  "ai-attribution": "${AI_ATTRIBUTION}"
+}
+CONF
+  echo "  created: .commit-guard.json"
 }
 
 install_native_hook() {
@@ -167,6 +204,8 @@ while [[ $# -gt 0 ]]; do
     --hook-mode) HOOK_MODE="$2"; shift 2 ;;
     --pm) PM="$2"; shift 2 ;;
     --pr-mode) PR_MODE="$2"; shift 2 ;;
+    --ai-attribution) AI_ATTRIBUTION="$2"; shift 2 ;;
+    --enforce) ENFORCE="$2"; shift 2 ;;
     --help|-h)
       echo "commit-guard installer"
       echo ""
@@ -178,6 +217,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --hook-mode <mode>     Hook mode: auto (default), husky, native, none"
       echo "  --pm <manager>         Package manager: pnpm, npm, yarn (auto-detected if omitted)"
       echo "  --pr-mode <mode>       PR lint mode: smart (default), commits, title"
+      echo "  --ai-attribution <p>   AI attribution policy: allow, warn, strip, block (default)"
+      echo "  --enforce <mode>       Enforcement: block (default), warn"
       echo "  --help                 Show this help"
       exit 0
       ;;
@@ -194,12 +235,14 @@ if ! git rev-parse --is-inside-work-tree &>/dev/null; then
 fi
 
 ensure_valid_pr_mode
+ensure_valid_policies
 detect_pm
 resolve_hook_mode
 
 echo "installing CI workflow..."
 mkdir -p "$WORKFLOW_DIR"
 curl -sL "$TEMPLATE_URL" -o "$WORKFLOW_FILE"
+write_config_file
 
 if [[ "$CONFIG" != "conventional" ]]; then
   replace_line 'config: "conventional"' "config: \"${CONFIG}\"" "$WORKFLOW_FILE"
@@ -231,6 +274,7 @@ esac
 echo ""
 echo "done! installed:"
 echo "  - CI workflow: ${WORKFLOW_FILE}"
+echo "  - Config: .commit-guard.json"
 
 if [[ "$HOOK_MODE" == "native" ]]; then
   echo "  - Local hook: $(git config --get core.hooksPath)/commit-msg"

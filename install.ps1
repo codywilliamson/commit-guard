@@ -18,7 +18,9 @@ param(
     [switch]$CIOnly,
     [string]$HookMode = "auto",
     [string]$PackageManager = "",
-    [string]$PRMode = "smart"
+    [string]$PRMode = "smart",
+    [string]$AIAttribution = "block",
+    [string]$Enforce = "block"
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,6 +36,32 @@ function Ensure-ValidPRMode {
     if ($PRMode -notin @("smart", "commits", "title")) {
         throw "Invalid PR mode '$PRMode'. Expected smart, commits, or title."
     }
+}
+
+function Ensure-ValidPolicies {
+    if ($AIAttribution -notin @("allow", "warn", "strip", "block")) {
+        throw "Invalid ai-attribution '$AIAttribution'. Expected allow, warn, strip, or block."
+    }
+    if ($Enforce -notin @("block", "warn")) {
+        throw "Invalid enforce '$Enforce'. Expected block or warn."
+    }
+}
+
+function Write-ConfigFile {
+    if (Test-Path ".commit-guard.json") {
+        Write-Host "  .commit-guard.json already exists, skipping"
+        return
+    }
+
+    @"
+{
+  "config": "$Config",
+  "pr-mode": "$PRMode",
+  "enforce": "$Enforce",
+  "ai-attribution": "$AIAttribution"
+}
+"@ | Set-Content -Path ".commit-guard.json"
+    Write-Host "  Created: .commit-guard.json" -ForegroundColor Green
 }
 
 function Resolve-HookMode {
@@ -139,11 +167,13 @@ if (-not $PackageManager) {
 }
 
 Ensure-ValidPRMode
+Ensure-ValidPolicies
 $ResolvedHookMode = Resolve-HookMode
 
 Write-Host "Installing CI workflow..."
 New-Item -ItemType Directory -Path $WorkflowDir -Force | Out-Null
 Invoke-WebRequest -Uri $TemplateUrl -OutFile $WorkflowFile -UseBasicParsing
+Write-ConfigFile
 
 $content = Get-Content $WorkflowFile -Raw
 if ($Config -ne "conventional") {
@@ -174,6 +204,7 @@ switch ($ResolvedHookMode) {
 Write-Host ""
 Write-Host "Done! Installed:" -ForegroundColor Green
 Write-Host "  - CI workflow: $WorkflowFile"
+Write-Host "  - Config: .commit-guard.json"
 if ($ResolvedHookMode -eq "native") {
     $hookPath = git config --get core.hooksPath
     Write-Host "  - Local hook: $hookPath/commit-msg"

@@ -24,6 +24,9 @@ test_installer_supports_native_hooks_and_pr_title_mode_without_node_repo() {
   assert_contains "created: .githooks/commit-msg" "$output" "expected native hook install output"
   assert_contains 'pr-mode: "title"' "$(cat "${repo_dir}/.github/workflows/commitlint.yml")" "expected PR mode to be rendered"
   assert_contains ".githooks" "$(git -C "$repo_dir" config --get core.hooksPath)" "expected git hooks path to point at tracked hooks"
+  assert_contains "created: .commit-guard.json" "$output" "expected starter config output"
+  assert_contains '"pr-mode": "title"' "$(cat "${repo_dir}/.commit-guard.json")" "expected pr mode in starter config"
+  assert_contains '"ai-attribution": "block"' "$(cat "${repo_dir}/.commit-guard.json")" "expected ai-attribution default in starter config"
 }
 
 test_installer_supports_native_hooks_and_pr_title_mode_without_node_repo
