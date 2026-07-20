@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # commit-guard native commit-msg hook
-# reads optional .commit-guard.json at the repo root
-# config parsing is duplicated in run-commitlint-ci.sh — keep in sync
+# reads optional .commit-guard.yml at the repo root (flat schema: top-level
+# keys, block-style lists). config parsing is duplicated in
+# run-commitlint-ci.sh — keep in sync
 
 MESSAGE_FILE="${1:-}"
 
@@ -13,7 +14,13 @@ if [[ -z "$MESSAGE_FILE" || ! -f "$MESSAGE_FILE" ]]; then
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-CONFIG_FILE="${REPO_ROOT}/.commit-guard.json"
+CONFIG_FILE=""
+for candidate in "${REPO_ROOT}/.commit-guard.yml" "${REPO_ROOT}/.commit-guard.yaml"; do
+  if [[ -f "$candidate" ]]; then
+    CONFIG_FILE="$candidate"
+    break
+  fi
+done
 
 DEFAULT_TYPES='build|chore|ci|docs|feat|fix|perf|refactor|style|test'
 AI_ATTRIBUTION_PATTERNS=(
@@ -22,52 +29,67 @@ AI_ATTRIBUTION_PATTERNS=(
   'noreply@anthropic\.com'
 )
 
-have_jq() {
-  [[ -z "${CG_FORCE_FALLBACK_PARSER:-}" ]] && command -v jq >/dev/null 2>&1
-}
+clean_yaml_value() {
+  local value="$1"
 
-if [[ -f "$CONFIG_FILE" ]] && have_jq && ! jq empty "$CONFIG_FILE" 2>/dev/null; then
-  echo "error: ${CONFIG_FILE} is not valid JSON." >&2
-  exit 1
-fi
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+
+  case "$value" in
+    \"*\")
+      value="${value#\"}"
+      value="${value%\"}"
+      ;;
+    \'*\')
+      value="${value#\'}"
+      value="${value%\'}"
+      ;;
+    *)
+      value="${value%%" #"*}"
+      value="${value%"${value##*[![:space:]]}"}"
+      ;;
+  esac
+
+  printf '%s\n' "$value"
+}
 
 config_get() {
   local key="$1"
   local default="$2"
-  local value=""
+  local raw=""
 
-  if [[ -f "$CONFIG_FILE" ]]; then
-    if have_jq; then
-      value="$(jq -r --arg k "$key" 'if has($k) then .[$k] | tostring else "" end' "$CONFIG_FILE")"
-    else
-      value="$(sed -n 's/^[[:space:]]*"'"$key"'"[[:space:]]*:[[:space:]]*"\{0,1\}\([^",]*\)"\{0,1\},\{0,1\}[[:space:]]*$/\1/p' "$CONFIG_FILE" | head -n 1)"
-    fi
+  if [[ -n "$CONFIG_FILE" ]]; then
+    raw="$(sed -n "s/^${key}:[[:space:]]*//p" "$CONFIG_FILE" | head -n 1)"
+    raw="$(clean_yaml_value "$raw")"
   fi
 
-  printf '%s\n' "${value:-$default}"
+  printf '%s\n' "${raw:-$default}"
 }
 
-config_get_array() {
+config_get_list() {
   local key="$1"
+  local line
+  local cleaned
 
-  if [[ ! -f "$CONFIG_FILE" ]]; then
+  if [[ -z "$CONFIG_FILE" ]]; then
     return 0
   fi
 
-  if have_jq; then
-    jq -r --arg k "$key" '.[$k] // [] | .[]' "$CONFIG_FILE"
-  else
-    # fallback: flat pretty-printed json, one array element per line
-    awk -v key="\"${key}\"" '
-      index($0, key) && /\[/ { inside = 1; next }
-      inside && /\]/ { exit }
-      inside {
-        gsub(/^[[:space:]]*"?/, "")
-        gsub(/"?,?[[:space:]]*$/, "")
-        if (length($0)) print
-      }
-    ' "$CONFIG_FILE"
-  fi
+  while IFS= read -r line; do
+    cleaned="$(clean_yaml_value "$line")"
+    if [[ -n "$cleaned" ]]; then
+      printf '%s\n' "$cleaned"
+    fi
+  done < <(awk -v key="$key" '
+    inlist {
+      if ($0 ~ /^[[:space:]]*(#|$)/) next
+      if ($0 !~ /^[[:space:]]+-[[:space:]]*/) exit
+      sub(/^[[:space:]]+-[[:space:]]*/, "")
+      print
+      next
+    }
+    $0 ~ "^" key ":[[:space:]]*(#.*)?$" { inlist = 1 }
+  ' "$CONFIG_FILE")
 }
 
 ENFORCE="$(config_get enforce block)"
@@ -89,7 +111,7 @@ case "$AI_ATTRIBUTION" in
     ;;
 esac
 
-TYPES="$(config_get_array types | paste -sd '|' -)"
+TYPES="$(config_get_list types | paste -sd '|' -)"
 TYPES="${TYPES:-$DEFAULT_TYPES}"
 CONVENTIONAL_REGEX="^(${TYPES})(\([[:alnum:]./_-]+\))?(!)?: .+"
 
@@ -179,7 +201,7 @@ check_ban_patterns() {
     if grep -Eiq -- "$pattern" <<< "$message"; then
       add_violation "commit message matches banned pattern: ${pattern}"
     fi
-  done < <(config_get_array ban-patterns)
+  done < <(config_get_list ban-patterns)
 }
 
 check_conventional_subject() {

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# reads optional .commit-guard.json in the caller repo root; file values win
-# over CG_* env fallbacks. config parsing mirrors validate-commit-message.sh —
-# keep in sync. jq is preinstalled on github runners.
+# reads optional .commit-guard.yml in the caller repo root; file values win
+# over CG_* env fallbacks. flat schema: top-level keys, block-style lists.
+# config parsing mirrors validate-commit-message.sh — keep in sync.
 
 EVENT_NAME="${CG_EVENT_NAME:-}"
 PR_MODE="${CG_PR_MODE:-smart}"
@@ -20,7 +20,13 @@ BAN_PATTERNS=""
 BRANCHES=""
 COMMITLINT_CMD="${CG_COMMITLINT_CMD:-commitlint}"
 
-CONFIG_FILE=".commit-guard.json"
+CONFIG_FILE=""
+for candidate in ".commit-guard.yml" ".commit-guard.yaml"; do
+  if [[ -f "$candidate" ]]; then
+    CONFIG_FILE="$candidate"
+    break
+  fi
+done
 
 AI_ATTRIBUTION_PATTERNS=(
   '^co-authored-by:.*(claude|copilot|chatgpt|openai|anthropic|gemini|cursor|devin|aider|codex|\[bot\])'
@@ -30,48 +36,88 @@ AI_ATTRIBUTION_PATTERNS=(
 
 FAILURE_COUNT=0
 
+clean_yaml_value() {
+  local value="$1"
+
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+
+  case "$value" in
+    \"*\")
+      value="${value#\"}"
+      value="${value%\"}"
+      ;;
+    \'*\')
+      value="${value#\'}"
+      value="${value%\'}"
+      ;;
+    *)
+      value="${value%%" #"*}"
+      value="${value%"${value##*[![:space:]]}"}"
+      ;;
+  esac
+
+  printf '%s\n' "$value"
+}
+
+config_get() {
+  local key="$1"
+  local default="$2"
+  local raw=""
+
+  if [[ -n "$CONFIG_FILE" ]]; then
+    raw="$(sed -n "s/^${key}:[[:space:]]*//p" "$CONFIG_FILE" | head -n 1)"
+    raw="$(clean_yaml_value "$raw")"
+  fi
+
+  printf '%s\n' "${raw:-$default}"
+}
+
+config_get_list() {
+  local key="$1"
+  local line
+  local cleaned
+
+  if [[ -z "$CONFIG_FILE" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r line; do
+    cleaned="$(clean_yaml_value "$line")"
+    if [[ -n "$cleaned" ]]; then
+      printf '%s\n' "$cleaned"
+    fi
+  done < <(awk -v key="$key" '
+    inlist {
+      if ($0 ~ /^[[:space:]]*(#|$)/) next
+      if ($0 !~ /^[[:space:]]+-[[:space:]]*/) exit
+      sub(/^[[:space:]]+-[[:space:]]*/, "")
+      print
+      next
+    }
+    $0 ~ "^" key ":[[:space:]]*(#.*)?$" { inlist = 1 }
+  ' "$CONFIG_FILE")
+}
+
 load_config_file() {
-  if [[ ! -f "$CONFIG_FILE" ]]; then
+  if [[ -z "$CONFIG_FILE" ]]; then
     return 0
   fi
 
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "warning: ${CONFIG_FILE} found but jq is unavailable, using workflow inputs only." >&2
-    return 0
-  fi
-
-  if ! jq empty "$CONFIG_FILE" 2>/dev/null; then
-    echo "error: ${CONFIG_FILE} is not valid JSON." >&2
-    exit 1
-  fi
-
-  file_get() {
-    local key="$1"
-    local fallback="$2"
-    local value
-
-    value="$(jq -r --arg k "$key" 'if has($k) then .[$k] | tostring else "" end' "$CONFIG_FILE")"
-    printf '%s\n' "${value:-$fallback}"
-  }
-
-  file_get_array() {
-    jq -r --arg k "$1" '.[$k] // [] | .[]' "$CONFIG_FILE"
-  }
-
-  PR_MODE="$(file_get pr-mode "$PR_MODE")"
-  ENFORCE="$(file_get enforce "$ENFORCE")"
-  AI_ATTRIBUTION="$(file_get ai-attribution "$AI_ATTRIBUTION")"
-  IGNORE_BOT_COMMITS="$(file_get ignore-bot-commits "$IGNORE_BOT_COMMITS")"
-  IGNORE_MERGE_COMMITS="$(file_get ignore-merge-commits "$IGNORE_MERGE_COMMITS")"
+  PR_MODE="$(config_get pr-mode "$PR_MODE")"
+  ENFORCE="$(config_get enforce "$ENFORCE")"
+  AI_ATTRIBUTION="$(config_get ai-attribution "$AI_ATTRIBUTION")"
+  IGNORE_BOT_COMMITS="$(config_get ignore-bot-commits "$IGNORE_BOT_COMMITS")"
+  IGNORE_MERGE_COMMITS="$(config_get ignore-merge-commits "$IGNORE_MERGE_COMMITS")"
 
   local file_ignore_patterns
-  file_ignore_patterns="$(file_get_array ignore-message-patterns)"
+  file_ignore_patterns="$(config_get_list ignore-message-patterns)"
   if [[ -n "$file_ignore_patterns" ]]; then
     IGNORE_MESSAGE_PATTERNS="$file_ignore_patterns"
   fi
 
-  BAN_PATTERNS="$(file_get_array ban-patterns)"
-  BRANCHES="$(file_get_array branches)"
+  BAN_PATTERNS="$(config_get_list ban-patterns)"
+  BRANCHES="$(config_get_list branches)"
 
   echo "loaded ${CONFIG_FILE} (file values override workflow inputs)"
 }

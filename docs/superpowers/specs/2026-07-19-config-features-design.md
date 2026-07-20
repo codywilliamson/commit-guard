@@ -3,6 +3,17 @@
 Date: 2026-07-19
 Status: approved (brainstormed interactively, implementation authorized autonomously)
 
+> **Amendment (same day):** the config format was changed from JSON to flat
+> YAML (`.commit-guard.yml`) after review. Rationale: flat YAML is trivially
+> and robustly parseable in pure bash (no jq dependency, no formatting
+> constraints on the fallback parser), and supports comments in the starter
+> config. CI validates syntax with `yq` (preinstalled on runners) and uses it
+> to inject `types` into the generated commitlint config; the lint scripts use
+> the same bash parser as the hook. Malformed YAML is caught loudly in CI;
+> locally the parser is lenient (mis-indented keys fall back to defaults) but
+> enum validation still rejects bad values. JSON references below are
+> historical.
+
 ## Goal
 
 Add a per-repo config file that both CI and local hooks read, plus four new

@@ -92,13 +92,17 @@ jobs:
         env:
           CONFIG_PRESET: ${{ inputs.config }}
         run: |
-          # .commit-guard.json wins over the workflow input when present
-          if [ -f .commit-guard.json ] && command -v jq >/dev/null 2>&1; then
-            if ! jq empty .commit-guard.json 2>/dev/null; then
-              echo "error: .commit-guard.json is not valid JSON." >&2
+          # .commit-guard.yml wins over the workflow input when present
+          cfg=""
+          for f in .commit-guard.yml .commit-guard.yaml; do
+            if [ -f "$f" ]; then cfg="$f"; break; fi
+          done
+          if [ -n "$cfg" ]; then
+            if ! yq e '.' "$cfg" >/dev/null; then
+              echo "error: ${cfg} is not valid YAML." >&2
               exit 1
             fi
-            file_preset="$(jq -r '.config // empty' .commit-guard.json)"
+            file_preset="$(yq e '.config // ""' "$cfg")"
             if [ -n "$file_preset" ]; then
               CONFIG_PRESET="$file_preset"
             fi
@@ -125,10 +129,15 @@ jobs:
         env:
           CONFIG_PRESET: ${{ steps.preset.outputs.preset }}
         run: |
+          cfg=""
+          for f in .commit-guard.yml .commit-guard.yaml; do
+            if [ -f "$f" ]; then cfg="$f"; break; fi
+          done
+
           # use repo config if it exists, otherwise create a temp one
           if [ -f commitlint.config.js ] || [ -f commitlint.config.mjs ] || [ -f commitlint.config.cjs ] || [ -f .commitlintrc.yml ] || [ -f .commitlintrc.json ]; then
-            if [ -f .commit-guard.json ] && [ "$(jq -r '.types // [] | length' .commit-guard.json)" != "0" ]; then
-              echo "repo commitlint config found; ignoring types from .commit-guard.json"
+            if [ -n "$cfg" ] && [ "$(yq e '.types // [] | length' "$cfg")" != "0" ]; then
+              echo "repo commitlint config found; ignoring types from ${cfg}"
             fi
             exit 0
           fi
@@ -140,8 +149,8 @@ jobs:
           fi
 
           types_json="[]"
-          if [ -f .commit-guard.json ]; then
-            types_json="$(jq -c '.types // []' .commit-guard.json)"
+          if [ -n "$cfg" ]; then
+            types_json="$(yq e -o=json -I=0 '.types // []' "$cfg")"
           fi
 
           if [ "$types_json" != "[]" ]; then

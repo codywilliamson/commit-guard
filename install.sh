@@ -91,20 +91,39 @@ ensure_valid_policies() {
 }
 
 write_config_file() {
-  if [[ -f ".commit-guard.json" ]]; then
-    echo "  .commit-guard.json already exists, skipping"
+  if [[ -f ".commit-guard.yml" ]] || [[ -f ".commit-guard.yaml" ]]; then
+    echo "  .commit-guard.yml already exists, skipping"
     return
   fi
 
-  cat > .commit-guard.json <<CONF
-{
-  "config": "${CONFIG}",
-  "pr-mode": "${PR_MODE}",
-  "enforce": "${ENFORCE}",
-  "ai-attribution": "${AI_ATTRIBUTION}"
-}
+  cat > .commit-guard.yml <<CONF
+# commit-guard config — values here override the workflow inputs
+# docs: https://github.com/codywilliamson/commit-guard
+
+# commitlint preset: conventional, angular
+config: ${CONFIG}
+# PR lint strategy: smart, commits, title
+pr-mode: ${PR_MODE}
+# block fails on violations, warn only reports them
+enforce: ${ENFORCE}
+# AI co-author trailers and bylines: allow, warn, strip, block
+ai-attribution: ${AI_ATTRIBUTION}
+
+# custom allowed commit types (defaults to the conventional set)
+# types:
+#   - feat
+#   - fix
+#   - chore
+
+# case-insensitive regexes that fail the lint anywhere in the message
+# ban-patterns:
+#   - password
+
+# only lint pushes to these branches (default: all)
+# branches:
+#   - main
 CONF
-  echo "  created: .commit-guard.json"
+  echo "  created: .commit-guard.yml"
 }
 
 install_native_hook() {
@@ -274,7 +293,7 @@ esac
 echo ""
 echo "done! installed:"
 echo "  - CI workflow: ${WORKFLOW_FILE}"
-echo "  - Config: .commit-guard.json"
+echo "  - Config: .commit-guard.yml"
 
 if [[ "$HOOK_MODE" == "native" ]]; then
   echo "  - Local hook: $(git config --get core.hooksPath)/commit-msg"

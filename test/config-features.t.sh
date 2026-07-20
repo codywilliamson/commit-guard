@@ -8,10 +8,10 @@ CI_SCRIPT="${ROOT_DIR}/scripts/run-commitlint-ci.sh"
 
 make_config_repo() {
   local repo_dir="$1"
-  local config_json="$2"
+  local config_yaml="$2"
 
   make_git_repo "$repo_dir"
-  printf '%s\n' "$config_json" > "${repo_dir}/.commit-guard.json"
+  printf '%s\n' "$config_yaml" > "${repo_dir}/.commit-guard.yml"
 }
 
 run_validator() {
@@ -26,9 +26,9 @@ run_validator() {
 test_custom_types_accept_and_reject() {
   local repo_dir
   repo_dir="$(make_temp_dir)/repo"
-  make_config_repo "$repo_dir" '{
-  "types": ["feat", "wip"]
-}'
+  make_config_repo "$repo_dir" 'types:
+  - feat
+  - wip'
 
   run_validator "$repo_dir" "wip: half-done thing"
 
@@ -37,31 +37,34 @@ test_custom_types_accept_and_reject() {
   fi
 }
 
-test_custom_types_with_fallback_parser() {
+test_parser_handles_comments_and_quotes() {
   local repo_dir
   repo_dir="$(make_temp_dir)/repo"
-  make_config_repo "$repo_dir" '{
-  "types": [
-    "feat",
-    "wip"
-  ]
-}'
+  make_config_repo "$repo_dir" '# full-line comment
+enforce: "block"
+ai-attribution: block # trailing comment
 
-  (
-    export CG_FORCE_FALLBACK_PARSER=1
-    run_validator "$repo_dir" "wip: fallback parser works"
-    if run_validator "$repo_dir" "chore: rejected via fallback" 2>/dev/null; then
-      fail "expected fallback parser to enforce custom types"
-    fi
-  )
+types:
+  # comment inside list
+  - "feat"
+
+  - wip'
+
+  run_validator "$repo_dir" "wip: quoted and commented config parses"
+
+  if run_validator "$repo_dir" "feat: with AI trailer
+
+Co-Authored-By: Claude <noreply@anthropic.com>" 2>/dev/null; then
+    fail "expected ai-attribution with trailing comment to still block"
+  fi
 }
 
 test_ban_patterns_reject_matching_message() {
   local repo_dir
   repo_dir="$(make_temp_dir)/repo"
-  make_config_repo "$repo_dir" '{
-  "ban-patterns": ["password", "^temp"]
-}'
+  make_config_repo "$repo_dir" 'ban-patterns:
+  - password
+  - "^temp"'
 
   if run_validator "$repo_dir" "feat: add Password rotation" 2>/dev/null; then
     fail "expected banned pattern to reject message"
@@ -73,9 +76,7 @@ test_ban_patterns_reject_matching_message() {
 test_ai_attribution_block() {
   local repo_dir
   repo_dir="$(make_temp_dir)/repo"
-  make_config_repo "$repo_dir" '{
-  "ai-attribution": "block"
-}'
+  make_config_repo "$repo_dir" 'ai-attribution: block'
 
   if run_validator "$repo_dir" "feat: add thing
 
@@ -97,9 +98,7 @@ Co-Authored-By: Human Person <human@example.com>"
 test_ai_attribution_warn_allows() {
   local repo_dir
   repo_dir="$(make_temp_dir)/repo"
-  make_config_repo "$repo_dir" '{
-  "ai-attribution": "warn"
-}'
+  make_config_repo "$repo_dir" 'ai-attribution: warn'
 
   run_validator "$repo_dir" "feat: add thing
 
@@ -110,9 +109,7 @@ test_ai_attribution_strip_rewrites_message() {
   local repo_dir
   local result
   repo_dir="$(make_temp_dir)/repo"
-  make_config_repo "$repo_dir" '{
-  "ai-attribution": "strip"
-}'
+  make_config_repo "$repo_dir" 'ai-attribution: strip'
 
   run_validator "$repo_dir" "feat: add thing
 
@@ -128,9 +125,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 test_enforce_warn_allows_bad_commit_locally() {
   local repo_dir
   repo_dir="$(make_temp_dir)/repo"
-  make_config_repo "$repo_dir" '{
-  "enforce": "warn"
-}'
+  make_config_repo "$repo_dir" 'enforce: warn'
 
   run_validator "$repo_dir" "totally not conventional"
 }
@@ -138,9 +133,7 @@ test_enforce_warn_allows_bad_commit_locally() {
 test_invalid_enum_fails_loudly() {
   local repo_dir
   repo_dir="$(make_temp_dir)/repo"
-  make_config_repo "$repo_dir" '{
-  "ai-attribution": "nope"
-}'
+  make_config_repo "$repo_dir" 'ai-attribution: nope'
 
   if run_validator "$repo_dir" "feat: fine subject" 2>/dev/null; then
     fail "expected invalid ai-attribution value to fail"
@@ -151,9 +144,7 @@ test_ci_file_overrides_env_enforce() {
   local temp_dir repo_dir base_sha head_sha
   temp_dir="$(make_temp_dir)"
   repo_dir="${temp_dir}/repo"
-  make_config_repo "$repo_dir" '{
-  "enforce": "warn"
-}'
+  make_config_repo "$repo_dir" 'enforce: warn'
 
   commit_file "$repo_dir" "README.md" "base" "feat: seed repo"
   base_sha="$(git -C "$repo_dir" rev-parse HEAD)"
@@ -178,9 +169,8 @@ test_ci_ban_pattern_fails_commit() {
   local temp_dir repo_dir base_sha head_sha
   temp_dir="$(make_temp_dir)"
   repo_dir="${temp_dir}/repo"
-  make_config_repo "$repo_dir" '{
-  "ban-patterns": ["hunter2"]
-}'
+  make_config_repo "$repo_dir" 'ban-patterns:
+  - hunter2'
 
   commit_file "$repo_dir" "README.md" "base" "feat: seed repo"
   base_sha="$(git -C "$repo_dir" rev-parse HEAD)"
@@ -206,9 +196,7 @@ test_ci_ai_attribution_strip_acts_as_block() {
   local temp_dir repo_dir base_sha head_sha
   temp_dir="$(make_temp_dir)"
   repo_dir="${temp_dir}/repo"
-  make_config_repo "$repo_dir" '{
-  "ai-attribution": "strip"
-}'
+  make_config_repo "$repo_dir" 'ai-attribution: strip'
 
   commit_file "$repo_dir" "README.md" "base" "feat: seed repo"
   base_sha="$(git -C "$repo_dir" rev-parse HEAD)"
@@ -236,9 +224,9 @@ test_ci_branch_filter_skips_other_branches() {
   local temp_dir repo_dir base_sha head_sha output
   temp_dir="$(make_temp_dir)"
   repo_dir="${temp_dir}/repo"
-  make_config_repo "$repo_dir" '{
-  "branches": ["main", "master"]
-}'
+  make_config_repo "$repo_dir" 'branches:
+  - main
+  - master'
 
   commit_file "$repo_dir" "README.md" "base" "feat: seed repo"
   base_sha="$(git -C "$repo_dir" rev-parse HEAD)"
@@ -262,7 +250,7 @@ test_ci_branch_filter_skips_other_branches() {
 }
 
 test_custom_types_accept_and_reject
-test_custom_types_with_fallback_parser
+test_parser_handles_comments_and_quotes
 test_ban_patterns_reject_matching_message
 test_ai_attribution_block
 test_ai_attribution_warn_allows

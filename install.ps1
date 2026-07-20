@@ -48,20 +48,39 @@ function Ensure-ValidPolicies {
 }
 
 function Write-ConfigFile {
-    if (Test-Path ".commit-guard.json") {
-        Write-Host "  .commit-guard.json already exists, skipping"
+    if ((Test-Path ".commit-guard.yml") -or (Test-Path ".commit-guard.yaml")) {
+        Write-Host "  .commit-guard.yml already exists, skipping"
         return
     }
 
     @"
-{
-  "config": "$Config",
-  "pr-mode": "$PRMode",
-  "enforce": "$Enforce",
-  "ai-attribution": "$AIAttribution"
-}
-"@ | Set-Content -Path ".commit-guard.json"
-    Write-Host "  Created: .commit-guard.json" -ForegroundColor Green
+# commit-guard config — values here override the workflow inputs
+# docs: https://github.com/codywilliamson/commit-guard
+
+# commitlint preset: conventional, angular
+config: $Config
+# PR lint strategy: smart, commits, title
+pr-mode: $PRMode
+# block fails on violations, warn only reports them
+enforce: $Enforce
+# AI co-author trailers and bylines: allow, warn, strip, block
+ai-attribution: $AIAttribution
+
+# custom allowed commit types (defaults to the conventional set)
+# types:
+#   - feat
+#   - fix
+#   - chore
+
+# case-insensitive regexes that fail the lint anywhere in the message
+# ban-patterns:
+#   - password
+
+# only lint pushes to these branches (default: all)
+# branches:
+#   - main
+"@ | Set-Content -Path ".commit-guard.yml"
+    Write-Host "  Created: .commit-guard.yml" -ForegroundColor Green
 }
 
 function Resolve-HookMode {
@@ -204,7 +223,7 @@ switch ($ResolvedHookMode) {
 Write-Host ""
 Write-Host "Done! Installed:" -ForegroundColor Green
 Write-Host "  - CI workflow: $WorkflowFile"
-Write-Host "  - Config: .commit-guard.json"
+Write-Host "  - Config: .commit-guard.yml"
 if ($ResolvedHookMode -eq "native") {
     $hookPath = git config --get core.hooksPath
     Write-Host "  - Local hook: $hookPath/commit-msg"
