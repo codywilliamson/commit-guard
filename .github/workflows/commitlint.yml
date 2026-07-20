@@ -27,6 +27,14 @@ on:
         description: "Newline-delimited regex patterns for commit subjects to skip"
         type: string
         default: ""
+      enforce:
+        description: "Enforcement mode: block or warn"
+        type: string
+        default: "block"
+      ai-attribution:
+        description: "AI attribution policy: allow, warn, strip, or block (strip acts as block in CI)"
+        type: string
+        default: "allow"
 
 permissions:
   contents: read
@@ -79,9 +87,27 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - name: Install commitlint
+      - name: Resolve config preset
+        id: preset
         env:
           CONFIG_PRESET: ${{ inputs.config }}
+        run: |
+          # .commit-guard.json wins over the workflow input when present
+          if [ -f .commit-guard.json ] && command -v jq >/dev/null 2>&1; then
+            if ! jq empty .commit-guard.json 2>/dev/null; then
+              echo "error: .commit-guard.json is not valid JSON." >&2
+              exit 1
+            fi
+            file_preset="$(jq -r '.config // empty' .commit-guard.json)"
+            if [ -n "$file_preset" ]; then
+              CONFIG_PRESET="$file_preset"
+            fi
+          fi
+          echo "preset=$CONFIG_PRESET" >> "$GITHUB_OUTPUT"
+
+      - name: Install commitlint
+        env:
+          CONFIG_PRESET: ${{ steps.preset.outputs.preset }}
         run: |
           # install in isolated temp dir to avoid peer dep conflicts with repo
           mkdir -p /tmp/commitlint-bin
@@ -97,15 +123,31 @@ jobs:
 
       - name: Create commitlint config
         env:
-          CONFIG_PRESET: ${{ inputs.config }}
+          CONFIG_PRESET: ${{ steps.preset.outputs.preset }}
         run: |
           # use repo config if it exists, otherwise create a temp one
-          if [ ! -f commitlint.config.js ] && [ ! -f commitlint.config.mjs ] && [ ! -f commitlint.config.cjs ] && [ ! -f .commitlintrc.yml ] && [ ! -f .commitlintrc.json ]; then
-            if [ "$CONFIG_PRESET" = "angular" ]; then
-              echo 'export default { extends: ["@commitlint/config-angular"] };' > commitlint.config.mjs
-            else
-              echo 'export default { extends: ["@commitlint/config-conventional"] };' > commitlint.config.mjs
+          if [ -f commitlint.config.js ] || [ -f commitlint.config.mjs ] || [ -f commitlint.config.cjs ] || [ -f .commitlintrc.yml ] || [ -f .commitlintrc.json ]; then
+            if [ -f .commit-guard.json ] && [ "$(jq -r '.types // [] | length' .commit-guard.json)" != "0" ]; then
+              echo "repo commitlint config found; ignoring types from .commit-guard.json"
             fi
+            exit 0
+          fi
+
+          if [ "$CONFIG_PRESET" = "angular" ]; then
+            extends_pkg="@commitlint/config-angular"
+          else
+            extends_pkg="@commitlint/config-conventional"
+          fi
+
+          types_json="[]"
+          if [ -f .commit-guard.json ]; then
+            types_json="$(jq -c '.types // []' .commit-guard.json)"
+          fi
+
+          if [ "$types_json" != "[]" ]; then
+            echo "export default { extends: [\"${extends_pkg}\"], rules: { \"type-enum\": [2, \"always\", ${types_json}] } };" > commitlint.config.mjs
+          else
+            echo "export default { extends: [\"${extends_pkg}\"] };" > commitlint.config.mjs
           fi
 
       - name: Determine commit range
@@ -145,6 +187,9 @@ jobs:
           CG_IGNORE_BOT_COMMITS: ${{ inputs.ignore-bot-commits }}
           CG_IGNORE_MERGE_COMMITS: ${{ inputs.ignore-merge-commits }}
           CG_IGNORE_MESSAGE_PATTERNS: ${{ inputs.ignore-message-patterns }}
+          CG_ENFORCE: ${{ inputs.enforce }}
+          CG_AI_ATTRIBUTION: ${{ inputs.ai-attribution }}
+          CG_REF_NAME: ${{ github.ref_name }}
           CG_COMMITLINT_CMD: commitlint
           NODE_PATH: /tmp/commitlint-bin/node_modules
         run: .commit-guard/scripts/run-commitlint-ci.sh
