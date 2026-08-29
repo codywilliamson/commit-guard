@@ -126,7 +126,7 @@ find_ai_attribution_lines() {
   local lowered
   local pattern
 
-  while IFS= read -r line; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
     lowered="${line,,}"
     for pattern in "${AI_ATTRIBUTION_PATTERNS[@]}"; do
       if [[ "$lowered" =~ $pattern ]]; then
