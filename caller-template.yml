@@ -6,10 +6,19 @@ on:
     types: [opened, synchronize, reopened, edited]
   merge_group:
   workflow_dispatch:
+    inputs:
+      from:
+        description: Starting commit SHA
+        required: true
+        type: string
+      to:
+        description: Ending commit SHA
+        required: true
+        type: string
 permissions: { contents: read }
 concurrency:
-  group: commitlint-${{ github.event.pull_request.number || github.ref || github.run_id }}
-  cancel-in-progress: true
+  group: commitlint-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   commitlint:
     timeout-minutes: 5
@@ -19,3 +28,5 @@ jobs:
         with:
           mode: commits
           token: ${{ github.token }}
+          from: ${{ inputs.from }}
+          to: ${{ inputs.to }}
