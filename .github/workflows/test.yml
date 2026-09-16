@@ -1,0 +1,29 @@
+name: Test
+on: [push, pull_request]
+permissions: { contents: read }
+jobs:
+  test:
+    strategy: { matrix: { os: [ubuntu-latest, macos-latest, windows-latest] } }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - run: go vet ./...
+      - run: go test ./...
+      - run: node scripts/build.mjs --current
+      - name: Test action with built binary
+        id: binary
+        shell: bash
+        run: |
+          bin="$(find "$(pwd)/dist" -maxdepth 1 -type f -name 'commit-guard_*' | head -1)"
+          if command -v cygpath >/dev/null; then bin="$(cygpath -w "$bin")"; fi
+          echo "path=$bin" >> "$GITHUB_OUTPUT"
+          CG_TEST_BINARY="$bin" node --test action/*.test.js
+      - name: Check real PR messages through this action
+        if: github.event_name == 'pull_request' && runner.os == 'Linux'
+        uses: ./
+        with:
+          binary: ${{ steps.binary.outputs.path }}

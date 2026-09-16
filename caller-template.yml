@@ -1,29 +1,21 @@
-## commit-guard caller workflow
-## install: copy this to .github/workflows/commitlint.yml
-## docs: https://github.com/codywilliamson/commit-guard
-
 name: Commitlint
-
 on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
   workflow_dispatch:
-
-permissions:
-  contents: read
-
+permissions: { contents: read }
+concurrency:
+  group: commitlint-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: true
 jobs:
   commitlint:
-    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.2.2
-    with:
-      ## config preset: conventional, angular
-      config: "conventional"
-      ## PR lint strategy: smart, commits, title
-      pr-mode: "smart"
-      ## optional: skip known noisy subjects
-      # ignore-message-patterns: |
-      #   ^Initial plan$
-    permissions:
-      contents: read
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - uses: codywilliamson/commit-guard@v0.3.0
+        with:
+          mode: commits
+          token: ${{ github.token }}
