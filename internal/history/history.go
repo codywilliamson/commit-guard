@@ -9,8 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/codywilliamson/commit-guard/internal/checker"
@@ -41,10 +44,11 @@ func Range(repo, from, to string) ([]checker.Commit, error) {
 
 // Outgoing parses git's pre-push input and returns the deduplicated commits
 // introduced by branch updates. Delete lines and tag refs are ignored. A
-// missing old object is reported by git; this function never fetches it.
+// missing old object is reported by git; this function never fetches it. The
+// first hook argument can be a configured remote name or a direct destination.
 func Outgoing(repo, remote string, stdin io.Reader) ([]checker.Commit, error) {
-	if strings.TrimSpace(remote) == "" || strings.HasPrefix(remote, "-") || strings.ContainsAny(remote, "\x00\r\n\t ") {
-		return nil, errors.New("invalid remote name")
+	if strings.TrimSpace(remote) == "" || strings.HasPrefix(remote, "-") || strings.ContainsAny(remote, "\x00\r\n") {
+		return nil, errors.New("invalid push destination")
 	}
 	if stdin == nil {
 		return nil, errors.New("pre-push input is nil")
@@ -91,10 +95,18 @@ func Outgoing(repo, remote string, stdin io.Reader) ([]checker.Commit, error) {
 	}
 	commits := make([]checker.Commit, 0)
 	seen := make(map[string]struct{})
+	var exclusions []string
 	for _, u := range updates {
 		var revisions []string
 		if u.newRef {
-			revisions = []string{u.local, "--not", "--remotes=" + remote}
+			if exclusions == nil {
+				var err error
+				exclusions, err = trackingExclusions(repo, remote)
+				if err != nil {
+					return nil, err
+				}
+			}
+			revisions = append([]string{u.local, "--not"}, exclusions...)
 		} else {
 			revisions = []string{u.old + ".." + u.local}
 		}
@@ -111,6 +123,73 @@ func Outgoing(repo, remote string, stdin io.Reader) ([]checker.Commit, error) {
 		}
 	}
 	return commits, nil
+}
+
+// Remote-tracking refs describe fetch destinations. Match those URLs rather
+// than excluding every remote: an unrelated remote may know commits that this
+// destination has never received. get-url expands Git's insteadOf rules locally.
+func trackingExclusions(repo, destination string) ([]string, error) {
+	out, err := exec.Command("git", "-C", repo, "remote").Output()
+	if err != nil {
+		return nil, fmt.Errorf("list configured remotes: %w", err)
+	}
+	names := strings.Fields(string(out))
+	for _, name := range names {
+		if name == destination {
+			return []string{"--remotes=" + name}, nil
+		}
+	}
+	var exclusions []string
+	for _, name := range names {
+		urls, err := exec.Command("git", "-C", repo, "remote", "get-url", name).Output()
+		if err != nil {
+			return nil, fmt.Errorf("read configured remote URL: %w", err)
+		}
+		for _, candidate := range strings.Split(strings.TrimSpace(string(urls)), "\n") {
+			if sameDestination(repo, destination, strings.TrimSuffix(candidate, "\r")) {
+				exclusions = append(exclusions, "--remotes="+name)
+				break
+			}
+		}
+	}
+	if len(exclusions) == 0 {
+		return nil, errors.New("cannot determine a new branch's offline baseline for this direct destination; use a configured remote for the destination and fetch its existing refs before retrying")
+	}
+	return exclusions, nil
+}
+
+func sameDestination(repo, a, b string) bool {
+	if a == b {
+		return true
+	}
+	localPath := func(value string) (string, bool) {
+		if strings.Contains(value, "://") {
+			parsed, err := url.Parse(value)
+			if err != nil || parsed.Scheme != "file" || (parsed.Host != "" && parsed.Host != "localhost") {
+				return "", false
+			}
+			value = parsed.Path
+			if runtime.GOOS == "windows" && len(value) > 2 && value[0] == '/' && value[2] == ':' {
+				value = value[1:]
+			}
+		} else if strings.Contains(value, ":") && filepath.VolumeName(value) == "" {
+			return "", false // SSH's user@host:path syntax is not a local path.
+		}
+		value = filepath.FromSlash(value)
+		if !filepath.IsAbs(value) {
+			value = filepath.Join(repo, value)
+		}
+		return filepath.Clean(value), true
+	}
+	left, lok := localPath(a)
+	right, rok := localPath(b)
+	if !lok || !rok {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
 }
 
 func validateOID(value, name string) error {

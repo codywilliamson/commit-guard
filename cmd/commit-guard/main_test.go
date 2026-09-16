@@ -147,3 +147,22 @@ func TestOutdatedInstallationFailsOffline(t *testing.T) {
 		t.Fatalf("hook attempted network instead of local notice: %s", out)
 	}
 }
+
+func TestDirectDestinationPushDoesNotRelintRemoteHistory(t *testing.T) {
+	bin := buildCLI(t)
+	root := makeRepo(t)
+	remote := filepath.Join(t.TempDir(), "destination with spaces.git")
+	mustCommand(t, root, "git", "init", "--bare", "-q", remote)
+	mustCommand(t, root, "git", "remote", "add", "origin", remote)
+	// Seed historical content before this repository adopts commit-guard.
+	mustCommand(t, root, "git", "commit", "--allow-empty", "-qm", "Historical nonconforming subject")
+	mustCommand(t, root, "git", "push", "-q", "origin", "HEAD:main")
+	mustCommand(t, root, bin, "install")
+	mustCommand(t, root, "git", "commit", "--allow-empty", "-qm", "feat: new branch work")
+	want := mustCommand(t, root, "git", "rev-parse", "HEAD")
+	// A path, rather than the configured name, becomes the hook's first arg.
+	mustCommand(t, root, "git", "push", "-q", remote, "HEAD:new-branch")
+	if got := mustCommand(t, remote, "git", "rev-parse", "refs/heads/new-branch"); got != want {
+		t.Fatalf("direct push did not reach expected commit: %s", got)
+	}
+}

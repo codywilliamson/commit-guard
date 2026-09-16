@@ -64,6 +64,8 @@ jobs:
 
 The action defaults to commit mode. `mode: title` checks the pull request title and continues to check commit ranges on pushes. `mode: smart` is retained as a compatibility alias for commit mode and does not skip bot commits or fall back to titles. Workflow dispatch runs require explicit `from` and `to` inputs. The action reads the fixed `.commit-guard.json` path so its policy matches local checks.
 
+The caller template wires both required inputs for manual runs. On a new branch, local pre-push validation uses the destination's known remote-tracking history. Direct URLs and filesystem paths are matched to a configured fetch destination. If no matching remote exists, use a configured remote and fetch its existing refs before retrying; the hook never fetches or guesses by excluding unrelated remotes.
+
 The action downloads one platform binary from the release and validates `SHA256SUMS`. It supports Linux, macOS, and Windows on amd64 and arm64. The optional `binary` input is intended for repository CI fixtures and tests that already built a checker.
 
 ## Keep a legacy reusable workflow
