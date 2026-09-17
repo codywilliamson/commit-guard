@@ -123,7 +123,7 @@ func RequiredRef(root string) (string, error) {
 	}
 	for ref := range refs {
 		if !ValidRef(ref) {
-			return "", fmt.Errorf("pin commit-guard to an exact release (v0.3.0) or full commit SHA; found %q", ref)
+			return "", fmt.Errorf("pin commit-guard to an exact release (v0.3.1) or full commit SHA; found %q", ref)
 		}
 		return ref, nil
 	}

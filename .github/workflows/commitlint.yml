@@ -17,7 +17,7 @@ jobs:
       - name: Reject unsupported legacy options
         if: inputs.config != 'conventional' || inputs.ignore-bot-commits != true || inputs.ignore-merge-commits != true || inputs.ignore-message-patterns != ''
         run: exit 1
-      - uses: codywilliamson/commit-guard@v0.3.0
+      - uses: codywilliamson/commit-guard@v0.3.1
         with:
           mode: ${{ inputs.pr-mode }}
           token: ${{ github.token }}

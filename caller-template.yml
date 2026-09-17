@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
-      - uses: codywilliamson/commit-guard@v0.3.0
+      - uses: codywilliamson/commit-guard@v0.3.1
         with:
           mode: commits
           token: ${{ github.token }}
