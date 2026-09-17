@@ -19,7 +19,7 @@ irm https://raw.githubusercontent.com/codywilliamson/commit-guard/main/install.p
 Use `--ci-only` or `-CIOnly` when you want the workflow and policy without local hooks. Pin the bootstrap download with the exact release tag in `COMMIT_GUARD_REF`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/codywilliamson/commit-guard/main/install.sh | COMMIT_GUARD_REF=v0.3.0 bash
+curl -fsSL https://raw.githubusercontent.com/codywilliamson/commit-guard/main/install.sh | COMMIT_GUARD_REF=v0.3.1 bash
 ```
 
 The installer adds a repository-local Git alias, without changing your global `PATH`:
@@ -57,7 +57,7 @@ jobs:
   commit-guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: codywilliamson/commit-guard@v0.3.0
+      - uses: codywilliamson/commit-guard@v0.3.1
         with:
           token: ${{ github.token }}
 ```
@@ -75,7 +75,7 @@ Existing callers can continue to use the reusable wrapper while migrating:
 ```yaml
 jobs:
   commit-guard:
-    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.3.0
+    uses: codywilliamson/commit-guard/.github/workflows/commitlint.yml@v0.3.1
     with:
       pr-mode: commits
     permissions:
@@ -92,7 +92,7 @@ There is no update lookup during a commit or pre-push check. Dependabot watches 
 git commit-guard sync
 ```
 
-`sync` downloads and verifies the exact repository-pinned release, or activates an already cached copy. It never selects the latest release implicitly. The downloaded native executable's `install --ref` accepts an exact release tag such as `v0.3.0` or a full commit SHA. It also accepts `--mode commits|title`, `--ci-only`, and `--no-updates`. The bootstrap scripts retain the legacy `--pr-mode` or `-PRMode` spelling as an alias for the mode selection.
+`sync` downloads and verifies the exact repository-pinned release, or activates an already cached copy. It never selects the latest release implicitly. The downloaded native executable's `install --ref` accepts an exact release tag such as `v0.3.1` or a full commit SHA. It also accepts `--mode commits|title`, `--ci-only`, and `--no-updates`. The bootstrap scripts retain the legacy `--pr-mode` or `-PRMode` spelling as an alias for the mode selection.
 
 ## Commit format
 

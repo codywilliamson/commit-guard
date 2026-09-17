@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] - 2026-09-17
+
+- Update pinned checkout, setup-go, and setup-node actions to their tested v7 releases.
+- Refresh the default installer and workflow references to v0.3.1.
+
 ## [0.3.0] - 2026-09-16
 
 Version 0.3.0 makes a native checker the shared implementation for local hooks and CI. It keeps the selected workflow release and local installation aligned without installing packages during validation.

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo="codywilliamson/commit-guard"
-ref="${COMMIT_GUARD_REF:-v0.3.0}"
+ref="${COMMIT_GUARD_REF:-v0.3.1}"
 if [[ ! "$ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo 'COMMIT_GUARD_REF must name an exact release, such as v0.3.0.' >&2
   exit 2

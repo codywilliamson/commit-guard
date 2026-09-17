@@ -9,7 +9,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$releaseRef = if ($Ref) { $Ref } elseif ($env:COMMIT_GUARD_REF) { $env:COMMIT_GUARD_REF } else { 'v0.3.0' }
+$releaseRef = if ($Ref) { $Ref } elseif ($env:COMMIT_GUARD_REF) { $env:COMMIT_GUARD_REF } else { 'v0.3.1' }
 if ($releaseRef -notmatch '^v\d+\.\d+\.\d+$') {
     throw 'Ref must name an exact release, such as v0.3.0.'
 }

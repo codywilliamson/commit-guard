@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	commitguard "github.com/codywilliamson/commit-guard"
 )
 
 func TestCheckCLI(t *testing.T) {
@@ -135,7 +137,7 @@ func TestOutdatedInstallationFailsOffline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data = bytes.ReplaceAll(data, []byte("commit-guard@v0.3.0"), []byte("commit-guard@v9.9.9"))
+	data = bytes.ReplaceAll(data, []byte("commit-guard@v"+commitguard.Version()), []byte("commit-guard@v9.9.9"))
 	if err := os.WriteFile(wf, data, 0644); err != nil {
 		t.Fatal(err)
 	}
