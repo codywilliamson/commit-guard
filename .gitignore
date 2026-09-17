@@ -1,3 +1,7 @@
+/dist/
+/bench_tmp/
+/commit-guard
+/commit-guard.exe
 node_modules/
 .DS_Store
 *.log

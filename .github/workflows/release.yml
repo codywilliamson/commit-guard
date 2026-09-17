@@ -1,0 +1,41 @@
+name: Release
+on:
+  push: { tags: ['v*'] }
+permissions: { contents: write }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - run: test "v$(cat VERSION)" = "$GITHUB_REF_NAME"
+      - name: Require a commit from main
+        run: git merge-base --is-ancestor HEAD origin/main
+      - run: bash test/test.sh
+      - run: node scripts/build.mjs
+      - name: Verify checksums
+        run: awk '{print $1 "  dist/" $2}' dist/SHA256SUMS | sha256sum -c -
+      - name: Extract release notes
+        run: awk '/^## \[/{if(found) exit} /^## \['"${GITHUB_REF_NAME#v}"'\]/{found=1; next} found' CHANGELOG.md > release-notes.md
+      - name: Upload draft release
+        run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md dist/commit-guard_* dist/SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Verify uploaded assets
+        run: |
+          verify_dir="$RUNNER_TEMP/commit-guard-release-check"
+          gh release download "$GITHUB_REF_NAME" --dir "$verify_dir"
+          cd "$verify_dir"
+          test "$(wc -l < SHA256SUMS)" -eq 6
+          sha256sum -c SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Publish verified release
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        env:
+          GH_TOKEN: ${{ github.token }}

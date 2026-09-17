@@ -1,0 +1,27 @@
+name: Published release smoke test
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: First immutable commit SHA (exclusive)
+        required: true
+        type: string
+      to:
+        description: Last immutable commit SHA (inclusive)
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  published-action:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: codywilliamson/commit-guard@v0.3.0
+        with:
+          from: ${{ inputs.from }}
+          to: ${{ inputs.to }}

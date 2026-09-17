@@ -1,0 +1,24 @@
+name: commit-guard
+description: Validate commit messages with the versioned commit-guard checker
+author: Cody Williamson
+inputs:
+  mode:
+    description: 'Validation mode: commits (default), title, or smart (an alias for commits)'
+    required: false
+    default: commits
+  token:
+    description: GitHub token used only for GitHub API reads
+    required: false
+    default: ${{ github.token }}
+  binary:
+    description: Optional prebuilt checker path, primarily for tests and repository CI fixtures
+    required: false
+  from:
+    description: Starting commit SHA for workflow_dispatch
+    required: false
+  to:
+    description: Ending commit SHA for workflow_dispatch
+    required: false
+runs:
+  using: node24
+  main: action/index.js

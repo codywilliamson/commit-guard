@@ -1,150 +1,23 @@
 name: Commitlint
-
 on:
   workflow_call:
     inputs:
-      config:
-        description: "Commitlint config preset (conventional, angular, or custom)"
-        type: string
-        default: "conventional"
-      node-version:
-        description: "Node.js version"
-        type: string
-        default: "22"
-      pr-mode:
-        description: "Pull request lint strategy: smart, commits, or title"
-        type: string
-        default: "smart"
-      ignore-bot-commits:
-        description: "Skip bot-authored commits when linting commit ranges"
-        type: boolean
-        default: true
-      ignore-merge-commits:
-        description: "Skip merge commits when linting commit ranges"
-        type: boolean
-        default: true
-      ignore-message-patterns:
-        description: "Newline-delimited regex patterns for commit subjects to skip"
-        type: string
-        default: ""
-
-permissions:
-  contents: read
-
+      config: { type: string, default: conventional }
+      node-version: { type: string, default: '24' }
+      pr-mode: { type: string, default: smart }
+      ignore-bot-commits: { type: boolean, default: true }
+      ignore-merge-commits: { type: boolean, default: true }
+      ignore-message-patterns: { type: string, default: '' }
+permissions: { contents: read }
 jobs:
   commitlint:
-    name: Lint Commit Messages
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout caller repo (with retry)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        shell: bash
-        run: |
-          # actions/checkout can fail transiently when github's git backend
-          # hasn't replicated a just-pushed sha yet ("not our ref").
-          # retry with backoff before giving up.
-          attempt=0
-          max_attempts=6
-          wait=8
-          until [ "$attempt" -ge "$max_attempts" ]; do
-            attempt=$((attempt + 1))
-            echo "::group::checkout attempt ${attempt}/${max_attempts}"
-            if git clone --filter=blob:none --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" . \
-              && git fetch --no-tags --depth=500 origin "$TARGET_SHA" \
-              && git checkout --detach "$TARGET_SHA"; then
-              echo "::endgroup::"
-              exit 0
-            fi
-            echo "::endgroup::"
-            rm -rf .git ./* ./.[!.]* 2>/dev/null || true
-            if [ "$attempt" -lt "$max_attempts" ]; then
-              echo "checkout failed, waiting ${wait}s before retry..."
-              sleep "$wait"
-              wait=$((wait * 2))
-            fi
-          done
-          echo "checkout failed after ${max_attempts} attempts"
-          exit 1
-
-      - uses: actions/checkout@v4
+      - name: Reject unsupported legacy options
+        if: inputs.config != 'conventional' || inputs.ignore-bot-commits != true || inputs.ignore-merge-commits != true || inputs.ignore-message-patterns != ''
+        run: exit 1
+      - uses: codywilliamson/commit-guard@v0.3.0
         with:
-          repository: codywilliamson/commit-guard
-          ref: ${{ github.job_workflow_sha }}
-          path: .commit-guard
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ inputs.node-version }}
-
-      - name: Install commitlint
-        env:
-          CONFIG_PRESET: ${{ inputs.config }}
-        run: |
-          # install in isolated temp dir to avoid peer dep conflicts with repo
-          mkdir -p /tmp/commitlint-bin
-          cd /tmp/commitlint-bin
-          npm init -y --silent
-          npm install @commitlint/cli@latest
-          if [ "$CONFIG_PRESET" = "conventional" ]; then
-            npm install @commitlint/config-conventional@latest
-          elif [ "$CONFIG_PRESET" = "angular" ]; then
-            npm install @commitlint/config-angular@latest
-          fi
-          echo "/tmp/commitlint-bin/node_modules/.bin" >> "$GITHUB_PATH"
-
-      - name: Create commitlint config
-        env:
-          CONFIG_PRESET: ${{ inputs.config }}
-        run: |
-          # use repo config if it exists, otherwise create a temp one
-          if [ ! -f commitlint.config.js ] && [ ! -f commitlint.config.mjs ] && [ ! -f commitlint.config.cjs ] && [ ! -f .commitlintrc.yml ] && [ ! -f .commitlintrc.json ]; then
-            if [ "$CONFIG_PRESET" = "angular" ]; then
-              echo 'export default { extends: ["@commitlint/config-angular"] };' > commitlint.config.mjs
-            else
-              echo 'export default { extends: ["@commitlint/config-conventional"] };' > commitlint.config.mjs
-            fi
-          fi
-
-      - name: Determine commit range
-        id: range
-        env:
-          GH_EVENT: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.event.after }}
-        run: |
-          normalize_sha() {
-            local value="$1"
-
-            if [[ -z "$value" || "$value" =~ ^0+$ ]]; then
-              return 1
-            fi
-
-            printf '%s\n' "$value"
-          }
-
-          if [ "$GH_EVENT" = "pull_request" ] || [ "$GH_EVENT" = "pull_request_target" ]; then
-            echo "from=$(normalize_sha "$BASE_SHA" || true)" >> "$GITHUB_OUTPUT"
-            echo "to=$(normalize_sha "$HEAD_SHA" || true)" >> "$GITHUB_OUTPUT"
-          else
-            echo "from=$(normalize_sha "$BEFORE_SHA" || true)" >> "$GITHUB_OUTPUT"
-            echo "to=$(normalize_sha "$AFTER_SHA" || true)" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Lint commits
-        env:
-          CG_EVENT_NAME: ${{ github.event_name }}
-          CG_PR_MODE: ${{ inputs.pr-mode }}
-          CG_PR_TITLE: ${{ github.event.pull_request.title }}
-          CG_RANGE_FROM: ${{ steps.range.outputs.from }}
-          CG_RANGE_TO: ${{ steps.range.outputs.to }}
-          CG_IGNORE_BOT_COMMITS: ${{ inputs.ignore-bot-commits }}
-          CG_IGNORE_MERGE_COMMITS: ${{ inputs.ignore-merge-commits }}
-          CG_IGNORE_MESSAGE_PATTERNS: ${{ inputs.ignore-message-patterns }}
-          CG_COMMITLINT_CMD: commitlint
-          NODE_PATH: /tmp/commitlint-bin/node_modules
-        run: .commit-guard/scripts/run-commitlint-ci.sh
+          mode: ${{ inputs.pr-mode }}
+          token: ${{ github.token }}
